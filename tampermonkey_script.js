@@ -1,25 +1,20 @@
 // ==UserScript==
-// @name         ChatGPT ➜ Gist or Copy
+// @name         ChatGPT ➜ Markdown Copy
 // @namespace    https://github.com/strickvl/openai-markdown-chat-share
-// @version      0.2
-// @description  Add buttons to chat.openai.com that capture conversations in Markdown (copy to clipboard or share to GitHub Gist).
+// @version      0.3
+// @description  Add copy buttons to ChatGPT that capture conversations and research reports in Markdown.
 // @author       Alex Strick van Linschoten
 // @match        https://chat.openai.com/*
 // @match        https://chatgpt.com/*
-// @icon         https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
-// @grant        GM_getValue
-// @grant        GM_setValue
-// @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @grant        GM_log
-// @connect      api.github.com
 // @require      https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.min.js
 // ==/UserScript==
 
 /**
- * ChatGPT → GitHub Gist or Copy
+ * ChatGPT → Markdown Copy
  * -------------------------------------------------------------
- * v0.2
+ * v0.3
  */
 (function () {
     "use strict";
@@ -27,11 +22,11 @@
     // DEBUG helper
     function debug(msg, obj) {
       if (obj) {
-        console.log(`[ChatGPT Share] ${msg}`, obj);
-        GM_log(`[ChatGPT Share] ${msg}`, JSON.stringify(obj));
+        console.log(`[ChatGPT Copy] ${msg}`, obj);
+        GM_log(`[ChatGPT Copy] ${msg}`, JSON.stringify(obj));
       } else {
-        console.log(`[ChatGPT Share] ${msg}`);
-        GM_log(`[ChatGPT Share] ${msg}`);
+        console.log(`[ChatGPT Copy] ${msg}`);
+        GM_log(`[ChatGPT Copy] ${msg}`);
       }
     }
   
@@ -40,19 +35,6 @@
     /*───────────────────────────────────────────────*/
     /*  CONFIG & UTILITIES                          */
     /*───────────────────────────────────────────────*/
-    async function getGitHubPAT() {
-      let pat = GM_getValue("github_pat", "");
-      if (!pat) {
-        pat = prompt(
-          "GitHub Personal‑Access Token (scope: gist) – stored **locally**:",
-          ""
-        );
-        if (!pat) throw new Error("PAT not provided.");
-        GM_setValue("github_pat", pat.trim());
-      }
-      return pat.trim();
-    }
-  
     // Configure TurndownService
     const turndown = new TurndownService({
       headingStyle: "atx",
@@ -374,37 +356,6 @@
       return content;
     }
     
-    // Share a research report
-    async function shareResearchReport(researchElement) {
-      debug("Sharing research report");
-      
-      try {
-        banner("Preparing research report…", "info", 1500);
-        
-        // Get research content
-        const content = scrapeResearchReport(researchElement);
-        if (!content) {
-          throw new Error("Could not extract research report content");
-        }
-        
-        // Build markdown
-        let md = "# ChatGPT Research Report\n\n";
-        md += content;
-        
-        // Upload to Gist
-        const pat = await getGitHubPAT();
-        banner("Uploading Gist…", "info", 0);
-        
-        // Upload with research report title
-        const url = await uploadGist(md, pat, "ChatGPT Research Report");
-        banner("Gist created!", "success");
-        window.open(url, "_blank");
-      } catch (e) {
-        console.error(e);
-        banner(e.message, "error", 6000);
-      }
-    }
-    
     // Post-process markdown to fix common link formatting issues
     function postProcessMarkdown(markdown) {
       if (!markdown) return "";
@@ -489,47 +440,6 @@
     }
   
     /*───────────────────────────────────────────────*/
-    /*  GITHUB GIST API                             */
-    /*───────────────────────────────────────────────*/
-    function uploadGist(markdown, pat, description = "ChatGPT Conversation") {
-      debug("Uploading to GitHub Gist API");
-      return new Promise((res, rej) => {
-        GM_xmlhttpRequest({
-          method: "POST",
-          url: "https://api.github.com/gists",
-          headers: {
-            Authorization: `token ${pat}`,
-            Accept: "application/vnd.github+json",
-          },
-          data: JSON.stringify({
-            description: description,
-            public: false,
-            files: {
-              chatgpt_conversation: {
-                filename: "chatgpt_conversation.md",
-                content: markdown,
-              },
-            },
-          }),
-          onload: (r) => {
-            if (r.status >= 200 && r.status < 300) {
-              debug("Gist created successfully");
-              res(JSON.parse(r.responseText).html_url);
-            }
-            else {
-              debug(`GitHub API error: ${r.status}`, r.responseText);
-              rej(new Error(`GitHub API error (${r.status})`));
-            }
-          },
-          onerror: (e) => {
-            debug("Network error contacting GitHub", e);
-            rej(new Error("Network error contacting GitHub"));
-          },
-        });
-      });
-    }
-  
-    /*───────────────────────────────────────────────*/
     /*  BANNER                                      */
     /*───────────────────────────────────────────────*/
     function banner(msg, kind = "info", dur = 4000) {
@@ -549,43 +459,18 @@
     function createButtons(idSuffix = "inline") {
       debug(`Creating buttons with suffix: ${idSuffix}`);
       
-      // Create container for both buttons
+      // Create container for the copy button
       const container = document.createElement("div");
-      container.className = "chatgpt-share-buttons-container";
+      container.className = "chatgpt-copy-buttons-container";
       container.style.display = "flex";
-      container.style.gap = "8px";
-      
-      // Create Gist button
-      const gistBtn = document.createElement("button");
-      gistBtn.id = `chatgpt-share-btn-${idSuffix}`;
-      gistBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M7.9 8.8h.4l4.9-5c.2-.2.2-.5 0-.7-.2-.2-.5-.2-.7 0L8 7.6 3.5 3.1c-.2-.2-.5-.2-.7 0-.2.2-.2.5 0 .7l4.9 5c0-.1.1 0 .2 0zm0 2.8h.4l4.9-5c.2-.2.2-.5 0-.7-.2-.2-.5-.2-.7 0L8 10.4l-4.5-4.5c-.2-.2-.5-.2-.7 0-.2.2-.2.5 0 .7l4.9 5c.1 0 .1.1.2 0z"></path></svg> Gist`;
-      gistBtn.title = "Share this conversation as a GitHub Gist";
-      gistBtn.className = "chatgpt-share-btn"; // Use a class for styling
-      
-      gistBtn.onclick = async () => {
-        try {
-          banner("Preparing conversation…", "info", 1500);
-          const convo = scrapeConversation();
-          if (!convo.length) throw new Error("No messages detected on screen.");
-          const md = toMarkdown(convo);
-          const pat = await getGitHubPAT();
-          banner("Uploading Gist…", "info", 0);
-          const url = await uploadGist(md, pat);
-          banner("Gist created!", "success");
-          window.open(url, "_blank");
-        } catch (e) {
-          console.error(e);
-          banner(e.message, "error", 6000);
-        }
-      };
       
       // Create Copy button
       const copyBtn = document.createElement("button");
       copyBtn.id = `chatgpt-copy-btn-${idSuffix}`;
-      copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg> Copy`;
+      copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`;
       copyBtn.title = "Copy conversation as Markdown to clipboard";
+      copyBtn.setAttribute("aria-label", "Copy conversation as Markdown");
       copyBtn.className = "chatgpt-copy-btn";
-      copyBtn.style.backgroundColor = "#1e88e5"; // Blue color
       
       copyBtn.onclick = async () => {
         try {
@@ -603,16 +488,14 @@
         }
       };
       
-      // Add buttons to container
       container.appendChild(copyBtn);
-      container.appendChild(gistBtn);
       
       return container;
     }
     
-    // Create share buttons for a research report
-    function createResearchShareButtons(researchElement, position = 'top') {
-      debug(`Creating ${position} share buttons for research report`);
+    // Create a copy button for a research report
+    function createResearchCopyButton(researchElement, position = 'top') {
+      debug(`Creating ${position} copy button for research report`);
       
       // Create unique class for this button position
       const containerClass = `chatgpt-research-buttons-${position}`;
@@ -671,44 +554,12 @@
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
       `;
       
-      // Create Share button
-      const shareBtn = document.createElement("button");
-      shareBtn.className = `chatgpt-research-share-btn`;
-      shareBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>`;
-      shareBtn.title = "Share this research report to GitHub Gist";
-      shareBtn.style.cssText = `
-        background: #19c37d;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        width: 28px;
-        height: 28px;
-        padding: 6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        opacity: 0.8;
-        transition: opacity 0.2s;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-      `;
-      
-      // Add hover effect for both buttons
-      [copyBtn, shareBtn].forEach(btn => {
-        btn.addEventListener('mouseover', () => {
-          btn.style.opacity = '1';
-        });
-        
-        btn.addEventListener('mouseout', () => {
-          btn.style.opacity = '0.8';
-        });
+      copyBtn.addEventListener('mouseover', () => {
+        copyBtn.style.opacity = '1';
       });
       
-      // Add click event for share button
-      shareBtn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        await shareResearchReport(researchElement);
+      copyBtn.addEventListener('mouseout', () => {
+        copyBtn.style.opacity = '0.8';
       });
       
       // Add click event for copy button
@@ -737,16 +588,14 @@
         }
       });
       
-      // Add buttons to container
       container.appendChild(copyBtn);
-      container.appendChild(shareBtn);
       
       return container;
     }
     
-    // Add share buttons to research reports only (top and bottom)
-    function addResearchShareButtons() {
-      debug("Adding share buttons to research reports");
+    // Add copy buttons to research reports only (top and bottom)
+    function addResearchCopyButtons() {
+      debug("Adding copy buttons to research reports");
       
       // Find all deep research reports
       const researchReports = document.querySelectorAll('.deep-research-result');
@@ -764,19 +613,19 @@
         
         // Add top buttons if needed
         if (!hasTopButtons) {
-          const topBtns = createResearchShareButtons(report, 'top');
+          const topBtns = createResearchCopyButton(report, 'top');
           if (topBtns) {
             report.appendChild(topBtns);
-            debug("Added top buttons to research report");
+            debug("Added top copy button to research report");
           }
         }
         
         // Add bottom buttons if needed
         if (!hasBottomButtons) {
-          const bottomBtns = createResearchShareButtons(report, 'bottom');
+          const bottomBtns = createResearchCopyButton(report, 'bottom');
           if (bottomBtns) {
             report.appendChild(bottomBtns);
-            debug("Added bottom buttons to research report");
+            debug("Added bottom copy button to research report");
           }
         }
       });
@@ -785,43 +634,43 @@
     /*───────────────────────────────────────────────*/
     /*  TARGET CONTAINER DETECTION                  */
     /*───────────────────────────────────────────────*/
+    function directChildFor(parent, descendant) {
+      let node = descendant;
+      while (node && node.parentElement !== parent) {
+        node = node.parentElement;
+      }
+      return node && node.parentElement === parent ? node : null;
+    }
+
     function findButtonTarget() {
       debug("Finding button target");
       
-      // Option 1: Try to find the trailing actions - best container for our button
-      const trailingActions = document.querySelector('[data-testid="composer-trailing-actions"]');
-      if (trailingActions) {
-        debug("Found trailing actions container");
-        return { 
-          element: trailingActions, 
-          method: 'prepend', 
-          position: 'first-child'
-        };
-      }
-      
-      // Option 2: Try to find composer footer actions
+      // Option 1: Use the footer action row so the copy button participates in layout.
       const composerActions = document.querySelector('[data-testid="composer-footer-actions"]');
       if (composerActions) {
         debug("Found composer actions container");
+        const trailingActions = composerActions.querySelector('[data-testid="composer-trailing-actions"]');
+        const trailingActionsChild = trailingActions ? directChildFor(composerActions, trailingActions) : null;
         return { 
           element: composerActions, 
-          method: 'append', 
-          position: 'relative'
-        };
-      }
-      
-      // Option 3: Try to add next to the textarea
-      const textarea = document.getElementById('prompt-textarea');
-      if (textarea && textarea.parentElement) {
-        debug("Found textarea container");
-        return { 
-          element: textarea.parentElement.parentElement,
-          method: 'append', 
-          position: 'after-input'
+          before: trailingActionsChild,
+          method: trailingActionsChild ? 'insert-before' : 'append',
+          position: 'composer-footer'
         };
       }
 
-      // Option 4: Try conversation header actions
+      // Option 2: Try the trailing actions as a compact fallback.
+      const trailingActions = document.querySelector('[data-testid="composer-trailing-actions"]');
+      if (trailingActions) {
+        debug("Found trailing actions container");
+        return {
+          element: trailingActions,
+          method: 'prepend',
+          position: 'trailing-actions'
+        };
+      }
+
+      // Option 3: Try conversation header actions
       const headerActions = document.getElementById('conversation-header-actions');
       if (headerActions) {
         debug("Found conversation header actions");
@@ -832,7 +681,7 @@
         };
       }
 
-      // Option 5: Use the floating button as fallback
+      // Option 4: Use the floating button as fallback
       debug("No suitable target found, will use floating button");
       return null;
     }
@@ -901,7 +750,7 @@
     
     function injectButton() {
       // Check if already injected
-      if (document.querySelector(".chatgpt-share-btn")) {
+      if (document.querySelector(".chatgpt-copy-btn")) {
         debug("Button already exists, skipping injection");
         return;
       }
@@ -914,82 +763,72 @@
         const buttonsContainer = createButtons("inline");
         
         // Apply styling based on where we're inserting the buttons
-        if (target.position === 'first-child') {
-          buttonsContainer.style.marginRight = "8px";
+        if (target.position === 'composer-footer') {
+          buttonsContainer.style.marginLeft = "6px";
+          buttonsContainer.style.marginRight = "6px";
+          if (target.before && target.before.parentElement === target.element) {
+            target.element.insertBefore(buttonsContainer, target.before);
+          } else {
+            target.element.appendChild(buttonsContainer);
+          }
+        } else if (target.position === 'trailing-actions') {
+          buttonsContainer.style.marginRight = "6px";
           target.element.prepend(buttonsContainer);
         } else if (target.position === 'relative') {
           buttonsContainer.style.marginLeft = "8px";
-          target.element.appendChild(buttonsContainer);
-        } else if (target.position === 'after-input') {
-          buttonsContainer.style.position = "absolute";
-          buttonsContainer.style.right = "15px";
-          buttonsContainer.style.top = "15px";
-          buttonsContainer.style.zIndex = "1000";
           target.element.appendChild(buttonsContainer);
         } else if (target.position === 'header') {
           buttonsContainer.style.marginLeft = "8px";
           target.element.appendChild(buttonsContainer);
         }
-      } else if (!document.querySelector("#chatgpt-share-btn-float")) {
-        debug("Injecting floating buttons");
-        // Fallback floating buttons (visible even if no target found)
+      } else if (!document.querySelector("#chatgpt-copy-btn-float")) {
+        debug("Injecting floating copy button");
+        // Fallback floating button (visible even if no target found)
         const floatBtns = createButtons("float");
         floatBtns.style.position = "fixed";
-        floatBtns.style.top = "12px";
+        floatBtns.style.top = "64px";
         floatBtns.style.right = "12px";
         floatBtns.style.zIndex = "9999";
         document.body.appendChild(floatBtns);
       }
       
-      // Also add share buttons to research reports
-      addResearchShareButtons();
+      // Also add copy buttons to research reports
+      addResearchCopyButtons();
     }
   
     // Add global styles for our buttons
     GM_addStyle(`
-      .chatgpt-share-buttons-container {
+      .chatgpt-copy-buttons-container {
         display: flex !important;
-        gap: 8px !important;
+        align-items: center !important;
+        flex: 0 0 auto !important;
       }
       
-      .chatgpt-share-btn,
       .chatgpt-copy-btn {
         color: white !important;
         border: none !important;
-        border-radius: 4px !important;
-        padding: 6px 12px !important;
+        border-radius: 8px !important;
+        width: 32px !important;
+        height: 32px !important;
+        padding: 0 !important;
         cursor: pointer !important;
-        font-weight: 500 !important;
         display: flex !important;
         align-items: center !important;
-        gap: 5px !important;
-        font-size: 14px !important;
-        line-height: 1.2 !important;
-        white-space: nowrap !important;
+        justify-content: center !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24) !important;
-        transition: all 0.3s cubic-bezier(.25,.8,.25,1) !important;
+        transition: background 0.2s ease, box-shadow 0.2s ease !important;
         z-index: 9999 !important;
       }
-      
-      .chatgpt-share-btn {
-        background: #19c37d !important;
-      }
-      
+
       .chatgpt-copy-btn {
         background: #1e88e5 !important;
       }
-      
-      .chatgpt-share-btn:hover {
-        background: #15a36b !important;
-        box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23) !important;
-      }
-      
+
       .chatgpt-copy-btn:hover {
         background: #1976d2 !important;
         box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23) !important;
       }
-      
-      .chatgpt-share-btn svg,
+
       .chatgpt-copy-btn svg {
         width: 16px !important;
         height: 16px !important;
@@ -1016,7 +855,6 @@
       }
       
       /* Research buttons */
-      .chatgpt-research-share-btn,
       .chatgpt-research-copy-btn {
         border: none !important;
         border-radius: 4px !important;
@@ -1032,26 +870,16 @@
         box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
         color: white !important;
       }
-      
-      .chatgpt-research-share-btn {
-        background: #19c37d !important;
-      }
-      
+
       .chatgpt-research-copy-btn {
         background: #1e88e5 !important;
       }
-      
-      .chatgpt-research-share-btn:hover {
-        opacity: 1 !important;
-        background: #15a36b !important;
-      }
-      
+
       .chatgpt-research-copy-btn:hover {
         opacity: 1 !important;
         background: #1976d2 !important;
       }
-      
-      .chatgpt-research-share-btn svg,
+
       .chatgpt-research-copy-btn svg {
         width: 12px !important;
         height: 12px !important;
@@ -1082,10 +910,10 @@
       debug("Setting up mutation observer");
       const obs = new MutationObserver((mutations) => {
         // Always check for new research reports
-        addResearchShareButtons();
+        addResearchCopyButtons();
         
         // Only re-inject main button if not present
-        if (!document.querySelector(".chatgpt-share-btn")) {
+        if (!document.querySelector(".chatgpt-copy-btn")) {
           debug(`Mutation observed (${mutations.length} changes) - button not found, re-injecting`);
           injectButton();
         }
@@ -1094,7 +922,7 @@
       
       // Regular retry as additional safety
       const retry = setInterval(() => {
-        if (!document.querySelector(".chatgpt-share-btn")) {
+        if (!document.querySelector(".chatgpt-copy-btn")) {
           debug("Retry timer fired - button not found, re-injecting");
           injectButton();
         } else {
@@ -1102,8 +930,8 @@
           clearInterval(retry);
         }
         
-        // Always try to add research share buttons
-        addResearchShareButtons();
+        // Always try to add research copy buttons
+        addResearchCopyButtons();
       }, 3000);
       
       // Clear retry after reasonable timeout
